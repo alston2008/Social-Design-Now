@@ -1,0 +1,316 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Shaped by the People</title>
+
+    <style>
+
+        html, body {
+            width: 100vw;
+            height: 92vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        @media screen and (max-width: 414px) {
+            html, body { width: 100vw; height: 94vh;}
+        }
+
+        body {
+            background: #bbbbbb;
+            margin: 0;
+            padding: 0;
+        }
+
+        #navContainer {
+            display: flex;
+            height: 52px;
+            padding: 10px 0px;
+            margin: 0px 20px;
+            justify-content: space-between;
+        }
+
+        button {
+            border: 0;
+            background-color: transparent;
+            height: 44px;
+            width: 44px;
+        }
+
+        button:disabled > img {
+            opacity: 50%;
+        }
+
+        .navButtonImage {
+            height: 32px;
+            width: 32px;
+        }
+
+        #downloadButton {
+            height: 44px;
+            width: 44px;
+            display: block;
+        }
+
+        #downloadButtonImage {
+            padding: 6px 6px 6px 6px;
+        }
+
+        *:focus {
+            outline: none !important;
+            box-shadow: 0 0 0 0 rgba(0,0,0,0) !important;
+        }
+
+        #canvasContainer {
+            height: 85vh;
+            display: flex;
+            justify-content: center;
+            padding: 0;
+        }
+
+        #left_page, #right_page {
+            height: 85vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        #single_page {
+            height: 70vh;
+            width: auto;
+            margin: 0;
+            padding: 0;
+        }
+
+        @media screen and (max-width: 1023px) {
+            #single_page {
+                display: block;
+            }
+            #left_page, #right_page {
+                display: none;
+            }
+        }
+
+        @media screen and (min-width: 1024px) {
+            #single_page {
+                display: none;
+            }
+            #left_page, #right_page {
+                display: inline;
+            }
+        }
+    </style>
+
+</head>
+
+<body>
+    <div id="navContainer">
+        <button id="prevButton"><img src="/images/SBTP_Icon_Left-Arrow.png" alt="Previous" class="navButtonImage" /></button>
+        <a href="https://shaped-by-the-people.s3-us-west-2.amazonaws.com/pdf/Shaped-by-the-People_Screen.pdf" download="Shaped-by-the-People_Screen.pdf" id="downloadButton"><img src="/images/SBTP_Icon_Download.png" alt="Download PDF" id="downloadButtonImage" class="navButtonImage" /></a>
+        <button id="printButton"><img src="/images/SBTP_Icon_Print.png" alt="Print" class="navButtonImage" /></button>
+        <button id="nextButton"><img src="/images/SBTP_Icon_Right-Arrow.png" alt="Next" class="navButtonImage" /></button>
+    </div>
+    <div id="canvasContainer">
+        <canvas id="left_page"></canvas><canvas id="right_page"></canvas><canvas id="single_page"></canvas>
+    </div>
+
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.3.200/pdf.min.js"></script>
+    
+    <script>
+
+        const pdfURL = 'https://shaped-by-the-people.s3-us-west-2.amazonaws.com/pdf/SBTP_Interior_020920_FINAL-WEB_RGB.pdf';
+        const printURL = 'https://shaped-by-the-people.s3-us-west-2.amazonaws.com/pdf/Shaped-by-the-People_Print.pdf';
+
+        const twoPageWidthThreshold = 1024;
+        var currentState = {
+            pdf: null,
+            pageIncrement: 2, // Should be 1 on mobile
+            currentPage: 1, // Should be 2 on mobile init
+            twoPageMode: true
+        }
+
+        console.log("window.devicePixelRatio: " +  window.devicePixelRatio)
+
+        const zoom = window.devicePixelRatio;
+
+        document.getElementById('prevButton')
+            .addEventListener('click', (e) => {
+                if(currentState.pdf == null || currentState.currentPage == 1) return;
+                currentState.currentPage -= currentState.pageIncrement;
+                render();
+            });
+
+        document.getElementById('printButton')
+            .addEventListener('click', (e) => {
+                var wnd = window.open(printURL);
+                wnd.onload = function(event) {
+                    wnd.print();
+                }
+            });
+
+        document.getElementById('nextButton')
+            .addEventListener('click', (e) => {
+                if(currentState.pdf == null || currentState.currentPage > currentState.pdf._pdfInfo.numPages) return;
+                currentState.currentPage += currentState.pageIncrement;
+                render();
+            });
+        
+        function configurePreviousNext() {
+
+            var previous = document.getElementById("prevButton")
+            var next = document.getElementById("nextButton")
+
+            if (currentState.pdf == null) {
+                console.log("disable both buttons");
+                previous.disabled = true;
+                next.disabled = true;
+                return;
+            }
+
+            previous.disabled = false;
+            next.disabled = false;
+
+            if (currentState.currentPage == 1) {
+                console.log("disabling previous");
+                previous.disabled = true;
+                return;
+            }
+
+            // remove + 1 for single page layout
+            if (currentState.currentPage + 1 >= currentState.pdf._pdfInfo.numPages) {
+                console.log("disabling next");
+                next.disabled = true;
+            }
+        }
+
+        function renderSinglePage() {
+
+            currentState.twoPageMode = false;
+
+            let maxCanvasWidth = Math.floor(canvasContainer.offsetWidth );
+            let maxCanvasHeight = Math.floor(canvasContainer.offsetHeight );
+
+            console.log("Max Canvas: " + maxCanvasWidth + " by " + maxCanvasHeight)
+
+            currentState.pdf.getPage(currentState.currentPage).then((page) => {
+
+                var canvas = document.getElementById("single_page");
+                var ctx = canvas.getContext('2d');
+
+                var viewport = page.getViewport(zoom);
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                console.log("Viewport: " + canvas.height/canvas.width)
+                console.log("Canvas: " + canvas.height/canvas.width)
+                console.log("Actual Canvas: " + canvas.width + " by " + canvas.height);
+
+                page.render({
+                    canvasContext: ctx,
+                    viewport: viewport
+                });
+            });
+            configurePreviousNext();
+        }
+
+        function renderTwoPages() {
+
+            if (!currentState.twoPageMode) {
+                if (currentState.currentPage >= 1 && currentState.currentPage % 2 == 0) {
+                    console.log("Decrementing page after single page rendering")
+                    currentState.currentPage -= 1
+                }
+                currentState.twoPageMode = true;
+            }
+
+            let maxCanvasWidth = Math.floor(canvasContainer.offsetWidth / 2.0 );
+            let maxCanvasHeight = Math.floor(canvasContainer.offsetHeight / 2.0 );
+
+            console.log("Max Canvas: " + maxCanvasWidth + " by " + maxCanvasHeight)
+
+            currentState.pdf.getPage(currentState.currentPage).then((page) => {
+
+                var canvas = document.getElementById("left_page");
+                var ctx = canvas.getContext('2d');
+
+                var viewport = page.getViewport(zoom);
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+
+                console.log("Viewport aspect ratio: " + canvas.height/canvas.width)
+                console.log("Viewport: " + viewport.width + " by " + viewport.height);
+                console.log("Actual Canvas: " + canvas.width + " by " + canvas.height);
+
+                page.render({
+                    canvasContext: ctx,
+                    viewport: viewport
+                });
+            });
+
+            if (currentState.currentPage + 1 <= currentState.pdf._pdfInfo.numPages) {
+                currentState.pdf.getPage(currentState.currentPage + 1).then((page) => {
+
+                    var canvas = document.getElementById("right_page");
+                    var ctx = canvas.getContext('2d');
+
+                    var viewport = page.getViewport(zoom);
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+
+                    page.render({
+                        canvasContext: ctx,
+                        viewport: viewport
+                    });
+                });
+            }
+
+            configurePreviousNext();
+        }
+
+        function render() {
+
+            var canvasContainer = document.getElementById("canvasContainer");
+            console.log("Container height: " + canvasContainer.offsetHeight);
+
+            if (canvasContainer.offsetWidth < twoPageWidthThreshold) {
+                console.log("show a single page, based on width")
+                currentState.pageIncrement = 1;
+                renderSinglePage();
+                return;
+            } else {
+                console.log("show two page layout, based on height")
+                currentState.pageIncrement = 2;
+                renderTwoPages();
+                return;
+            }
+        };
+
+        pdfjsLib.getDocument(pdfURL).then((pdf) => {
+
+            currentState.pdf = pdf;
+            var canvasContainer = document.getElementById("canvasContainer");
+
+            if (canvasContainer.offsetWidth < twoPageWidthThreshold) {
+                currentState.currentPage = 2;
+                console.log("Start at second page");
+            } else {
+                console.log("Start at first page");
+            }
+            render();
+        });
+
+        window.onresize = function(event) {
+            var canvasContainer = document.getElementById("canvasContainer");
+            console.log("Resize event");
+            console.log("Container width: " + canvasContainer.offsetWidth);
+            console.log("Container height: " + canvasContainer.offsetHeight);
+            render();
+        };
+    </script>
+
+</body>
+
+</html>
